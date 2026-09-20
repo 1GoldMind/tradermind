@@ -98,6 +98,7 @@
   <span class="regime tr" id="regimePill">— </span>
   <span class="sm mut" id="stripBias">connect to load</span>
   <span class="sm" id="stripEvent" style="margin-left:auto"></span>
+  <span class="xs mut" style="opacity:.5">v12</span>
 </div>
 
 <!-- PREP -->
@@ -371,6 +372,7 @@ async function logTrade(){
   var steps=(S&&S.playbook)?S.playbook:[], pct=steps.length?Math.round(GATE.filter(Boolean).length/steps.length*100):0, tk=document.getElementById('ticket');
   var body={type:'entry',pair:document.getElementById('tPair').value,dir:segVal('tDir'),setup:segVal('tSetup'),entryDT:new Date().toISOString(),
     entry:val('tEntry'),sl:val('tSL'),tp1:val('tTP1'),tp2:val('tTP2'),lots:val('tLots'),risk:val('tRisk'),checklist:pct,
+    gates:GATE.map(function(g,i){return g?(i+1):null;}).filter(function(x){return x;}).join(','),
     ticket:tk.dataset.ticket||'',breach:tk.dataset.breach||'',mode:document.getElementById('tBT').checked?'BT':'Live'};
   msg('logMsg','Saving…');
   try{ var j=await push(body); if(j.ok){ msg('logMsg','Logged '+j.id+'.'); GATE=[]; ['tEntry','tSL','tTP1','tTP2','tLots'].forEach(id=>document.getElementById(id).value=''); refresh(); } else msg('logMsg','Error: '+(j.err||'?')); }
