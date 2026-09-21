@@ -382,10 +382,11 @@ function renderOpen(){
   var el=document.getElementById('openTrades'), open=((S&&S.trades_open)||[]).concat(((S&&S.trades_open_bt)||[]).map(t=>(t._bt=true,t)));
   if(!open.length){ el.className='empty'; el.textContent='No open trades.'; return; }
   el.className='';
-  el.innerHTML=open.map(function(t){ return '<div class="card tight"><div class="between"><b class="mono">'+t.pair+' '+t.dir+(t._bt?' <span class="xs amber">BT</span>':'')+'</b><span class="xs mut mono">'+t.id+'</span></div><div class="xs mut mono" style="margin:4px 0 8px">entry '+t.entry+' · SL '+t.sl+' · risk '+(t.risk||'?')+'%</div><div class="row"><input class="mono" id="ex_'+t.id+'" placeholder="exit price" inputmode="decimal" style="flex:1"><button class="btn good sm" onclick="closeTrade(\''+t.id+'\')">Close</button></div></div>'; }).join('');
+  el.innerHTML=open.map(function(t){ return '<div class="card tight"><div class="between"><b class="mono">'+t.pair+' '+t.dir+(t._bt?' <span class="xs amber">BT</span>':'')+'</b><span class="xs mut mono">'+t.id+'</span></div><div class="xs mut mono" style="margin:4px 0 8px">entry '+t.entry+' · SL '+t.sl+' · risk '+(t.risk||'?')+'%</div><input class="mono" id="ls_'+t.id+'" placeholder="lesson / note (optional)" style="margin-bottom:6px"><div class="row"><input class="mono" id="ex_'+t.id+'" placeholder="exit price" inputmode="decimal" style="flex:1"><button class="btn good sm" onclick="closeTrade(\''+t.id+'\')">Close</button></div></div>'; }).join('');
 }
 async function closeTrade(id){ var ex=document.getElementById('ex_'+id).value.trim(); if(!ex){ alert('Enter exit price'); return; }
-  try{ var j=await push({type:'exit',id:id,exit:ex,exitDT:new Date().toISOString(),lesson:''}); if(j.ok) refresh(); else alert('Error: '+(j.err||'?')); }catch(e){ alert('Failed — offline?'); }
+  var lessonEl=document.getElementById('ls_'+id); var lesson=lessonEl?lessonEl.value.trim():'';
+  try{ var j=await push({type:'exit',id:id,exit:ex,exitDT:new Date().toISOString(),lesson:lesson}); if(j.ok) refresh(); else alert('Error: '+(j.err||'?')); }catch(e){ alert('Failed — offline?'); }
 }
 
 // ---- stats ----
