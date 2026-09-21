@@ -64,8 +64,10 @@
   .ev{display:grid;grid-template-columns:44px 40px 1fr auto;gap:8px;align-items:start;padding:8px 0;border-bottom:1px solid var(--line)}
   .ev:last-child{border-bottom:none}
   .ccy{font-size:11px;font-weight:700;padding:2px 5px;border-radius:5px;background:var(--panel2);text-align:center}
-  .fpa{font-size:10.5px;color:var(--mut);margin-top:2px;font-family:ui-monospace,monospace}
-  .fpa b.up{color:var(--long)}.fpa b.dn{color:var(--short)}.fpa b.eq{color:var(--txt)}
+  .fpa{font-size:13.5px;color:var(--txt);margin-top:4px;font-family:ui-monospace,monospace;font-weight:600}
+  .fpa .bull{color:#16c784}.fpa .bear{color:#ea3943}.fpa .neu{color:#3b82f6}
+  .fpa b.up{color:#16c784}.fpa b.dn{color:#ea3943}.fpa b.eq{color:#3b82f6}
+  .fpa .lbl{color:var(--mut);font-weight:400;font-size:11px}
   .gate-step{display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--line)}
   .gate-step:last-child{border-bottom:none}
   .chk{width:22px;height:22px;border-radius:6px;border:1.5px solid var(--line);flex:none;margin-top:1px;display:flex;align-items:center;justify-content:center;font-size:13px;background:var(--ink)}
@@ -105,6 +107,10 @@
 <section class="sec on" id="sec-prep"><div class="wrap">
   <div class="head"><h2>Prep</h2><button class="btn ghost sm" onclick="refresh()">Refresh</button></div>
   <div id="offline"></div>
+  <div class="card">
+    <div class="between"><h3>Currency strength</h3><span class="xs mut">strong → weak</span></div>
+    <div id="strengthChart" class="empty">—</div>
+  </div>
   <div class="card">
     <div class="between"><h3>Macro bias — pairs ranked</h3><span class="xs mut">rate differential</span></div>
     <div id="biasBoard" class="empty">—</div>
@@ -258,7 +264,7 @@ function setTab(t){ TAB=t;
 function segPick(id,btn){ document.getElementById(id).querySelectorAll('button').forEach(b=>b.classList.remove('on')); btn.classList.add('on'); }
 function segVal(id){ var b=document.getElementById(id).querySelector('button.on'); return b?b.dataset.v:''; }
 
-function renderAll(){ renderStrip(); renderPrep(); renderCalendar(); fillPairs(); fillCalcPairs(); renderToday(); renderOpen(); renderStats(); }
+function renderAll(){ renderStrip(); renderStrength(); renderPrep(); renderCalendar(); fillPairs(); fillCalcPairs(); renderToday(); renderOpen(); renderStats(); }
 
 function renderStrip(){
   if(!S) return;
@@ -271,6 +277,25 @@ function renderStrip(){
   document.getElementById('stripEvent').innerHTML=ev?('<span class="amber">⚠ '+ev.ccy+' '+ev.inTxt+'</span>'):'';
 }
 
+function renderStrength(){
+  var el=document.getElementById('strengthChart'); if(!el) return;
+  var d=(S&&S.strength)?S.strength:[];
+  if(!d.length){ el.className='empty'; el.textContent='No strength data.'; return; }
+  el.className='';
+  var max=Math.max.apply(null,d.map(function(x){return Math.abs(x.score);}))||1;
+  el.innerHTML=d.map(function(x){
+    var pct=Math.round(Math.abs(x.score)/max*100);
+    var pos=x.score>=0;
+    var col=pos?'#16c784':'#ea3943';
+    return '<div style="display:flex;align-items:center;gap:8px;margin:5px 0">'+
+      '<span class="mono" style="width:38px;font-weight:700">'+x.ccy+'</span>'+
+      '<div style="flex:1;background:rgba(128,128,128,.12);border-radius:5px;height:20px;position:relative">'+
+        '<div style="width:'+pct+'%;background:'+col+';height:100%;border-radius:5px"></div>'+
+      '</div>'+
+      '<span class="mono xs" style="width:42px;text-align:right;color:'+col+';font-weight:700">'+(pos?'+':'')+x.score+'</span>'+
+    '</div>';
+  }).join('');
+}
 function renderPrep(){
   var el=document.getElementById('biasBoard');
   if(!S||!S.cot||!S.cot.length){ el.className='empty'; el.textContent='No bias data.'; return; }
@@ -310,16 +335,24 @@ function renderCalendar(){
       var d=evDate(e), t=d.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'});
       var imp=String(e.Impact).toLowerCase(), mins=Math.round((d-Date.now())/6e4);
       var inTxt=mins<0?'past':mins<60?mins+'m':(mins/60).toFixed(1)+'h';
-      // forecast / previous / actual line
+      // forecast / previous / actual line — colored bull(green)/bear(red)/neutral(blue)
       var f=e.Forecast, p=e.Previous, a=e.Actual;
+      var nf=parseNum(f), np=parseNum(p), na_=parseNum(a);
       var fpa='';
-      if(f!==''&&f!=null) fpa+='F:'+f+' ';
-      if(p!==''&&p!=null) fpa+='P:'+p+' ';
+      // Forecast vs Previous: is the expectation higher (bullish) or lower (bearish)?
+      if(f!==''&&f!=null){
+        var fcls='neu';
+        if(isFinite(nf)&&isFinite(np)) fcls = nf>np?'bull':nf<np?'bear':'neu';
+        fpa+='<span class="lbl">F:</span><span class="'+fcls+'">'+f+'</span>  ';
+      }
+      if(p!==''&&p!=null){
+        fpa+='<span class="lbl">P:</span><span class="neu">'+p+'</span>  ';
+      }
+      // Actual vs Forecast: beat (bullish/green) or miss (bearish/red)
       if(a!==''&&a!=null){
-        var na_=parseNum(a), nf=parseNum(f);
         var cls=isFinite(na_)&&isFinite(nf)?(na_>nf?'up':na_<nf?'dn':'eq'):'eq';
-        var arr=cls==='up'?'▲':cls==='dn'?'▼':'';
-        fpa+='A:<b class="'+cls+'">'+a+' '+arr+'</b>';
+        var arr=cls==='up'?'▲':cls==='dn'?'▼':'●';
+        fpa+='<span class="lbl">A:</span><b class="'+cls+'">'+a+' '+arr+'</b>';
       }
       return '<div class="ev"><span class="mono xs mut">'+t+'</span><span class="ccy">'+e.Currency+'</span>'+
         '<span><span class="sm">'+e.Event+'</span>'+(fpa?('<div class="fpa">'+fpa+'</div>'):'')+'</span>'+
