@@ -201,6 +201,8 @@
 <!-- MORE -->
 <section class="sec" id="sec-more"><div class="wrap">
   <div class="head"><h2>More</h2></div>
+  <h3 class="statgrp">Manual yields — GBP · NZD · CHF (2Y)</h3>
+  <div class="card"><div id="manualYields" class="empty">—</div></div>
   <h3 class="statgrp">Macro reference — keep in mind</h3>
   <details><summary>The macro funnel</summary><div class="body">How a currency gets strength, top to bottom:<div class="flow">Economy &amp; data <span class="a">→</span> central bank <span class="a">→</span> interest rates <span class="a">→</span> 2Y yield <span class="a">→</span> currency<br><span class="mut"># and in a crisis, FEAR overrides the whole chain</span></div><b>Under all of it: trust.</b></div></details>
   <details><summary>Interest rates — the engine</summary><div class="body">The central-bank rate ripples into every currency's appeal.<div class="flow">Rates <span class="g">↑</span> → better return → <span class="g">stronger</span><br>Rates <span class="r">↓</span> → less reward → <span class="r">weaker</span></div>You track it via the <b>2-year yield</b>.</div></details>
@@ -264,7 +266,7 @@ function setTab(t){ TAB=t;
 function segPick(id,btn){ document.getElementById(id).querySelectorAll('button').forEach(b=>b.classList.remove('on')); btn.classList.add('on'); }
 function segVal(id){ var b=document.getElementById(id).querySelector('button.on'); return b?b.dataset.v:''; }
 
-function renderAll(){ renderStrip(); renderStrength(); renderPrep(); renderCalendar(); fillPairs(); fillCalcPairs(); renderToday(); renderOpen(); renderStats(); }
+function renderAll(){ renderStrip(); renderStrength(); renderPrep(); renderCalendar(); fillPairs(); fillCalcPairs(); renderToday(); renderOpen(); renderStats(); renderManualYields(); }
 
 function renderStrip(){
   if(!S) return;
@@ -277,6 +279,35 @@ function renderStrip(){
   document.getElementById('stripEvent').innerHTML=ev?('<span class="amber">⚠ '+ev.ccy+' '+ev.inTxt+'</span>'):'';
 }
 
+function renderManualYields(){
+  var el=document.getElementById('manualYields'); if(!el) return;
+  var ms=(S&&S.manualStatus)?S.manualStatus:[];
+  if(!ms.length){ el.className='empty'; el.textContent='No manual currencies.'; return; }
+  el.className='';
+  el.innerHTML=ms.map(function(m){
+    var miss=m.missing2y||[];
+    var missTxt=miss.length? '<span class="xs r">missing: '+miss.slice(0,5).join(', ')+(miss.length>5?'…':'')+'</span>' : '<span class="xs g">up to date ✅</span>';
+    var dateOpts=miss.map(function(d){return '<option value="'+d+'">'+d+'</option>';}).join('');
+    return '<div style="margin:8px 0;padding-bottom:8px;border-bottom:1px solid rgba(128,128,128,.15)">'+
+      '<div class="between"><b class="mono">'+m.ccy+' 2Y</b>'+missTxt+'</div>'+
+      '<div class="row" style="margin-top:6px">'+
+        '<select id="myd_'+m.ccy+'" class="mono" style="flex:1">'+dateOpts+'</select>'+
+        '<input id="myv_'+m.ccy+'" class="mono" placeholder="yield %" inputmode="decimal" style="flex:1">'+
+        '<button class="btn good sm" onclick="logManualYield(\''+m.ccy+'\')">Log</button>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+}
+async function logManualYield(ccy){
+  var d=document.getElementById('myd_'+ccy).value;
+  var v=document.getElementById('myv_'+ccy).value.trim();
+  if(!d){ alert('No date selected'); return; }
+  if(!v){ alert('Enter yield value'); return; }
+  try{
+    var j=await push({type:'manualYield',currency:ccy,tenor:'2Y',date:d,value:v});
+    if(j.ok){ refresh(); } else alert('Error: '+(j.err||'?'));
+  }catch(e){ alert('Failed — offline?'); }
+}
 function renderStrength(){
   var el=document.getElementById('strengthChart'); if(!el) return;
   var d=(S&&S.strength)?S.strength:[];
