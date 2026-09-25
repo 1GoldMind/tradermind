@@ -266,7 +266,11 @@ function setTab(t){ TAB=t;
 function segPick(id,btn){ document.getElementById(id).querySelectorAll('button').forEach(b=>b.classList.remove('on')); btn.classList.add('on'); }
 function segVal(id){ var b=document.getElementById(id).querySelector('button.on'); return b?b.dataset.v:''; }
 
-function renderAll(){ renderStrip(); renderStrength(); renderPrep(); renderCalendar(); fillPairs(); fillCalcPairs(); renderToday(); renderOpen(); renderStats(); renderManualYields(); }
+function renderAll(){
+  [renderStrip,renderStrength,renderManualYields,renderPrep,renderCalendar,fillPairs,fillCalcPairs,renderToday,renderOpen,renderStats].forEach(function(fn){
+    try{ fn(); }catch(e){ console.error(fn.name+' failed:', e); }
+  });
+}
 
 function renderStrip(){
   if(!S) return;
@@ -453,16 +457,26 @@ async function closeTrade(id){ var ex=document.getElementById('ex_'+id).value.tr
   try{ var j=await push({type:'exit',id:id,exit:ex,exitDT:new Date().toISOString(),lesson:lesson}); if(j.ok) refresh(); else alert('Error: '+(j.err||'?')); }catch(e){ alert('Failed — offline?'); }
 }
 
-// ---- stats ----
+// ---- stats (reads object: {overall, gates, pairs}) ----
 function renderStats(){
   if(!S) return;
-  var mode=segVal('stMode')||'live', st=S.stats||[], g=k=>{var r=st.find(x=>x.k===k);return r?r.v:'–';};
-  document.getElementById('kpis').innerHTML=kpi(g('Closed trades'),'closed')+kpi(g('Expectancy R'),'expectancy R')+kpi(g('Win rate'),'win rate');
-  var c=(S.combos&&S.combos[mode])||{best:[],worst:[],n:0}, cel=document.getElementById('combos');
-  if(!c.n){ cel.className='empty'; cel.textContent='No '+mode+' trades yet. Combos unlock at 5 per factor.'; }
-  else { cel.className=''; cel.innerHTML='<div class="statgrp pos">TRADE MORE</div>'+(c.best.length?c.best.map(comboLine).join(''):'<div class="xs mut">nothing +ve yet</div>')+'<div class="statgrp" style="color:var(--short)">CUT</div>'+(c.worst.length?c.worst.map(comboLine).join(''):'<div class="xs mut">nothing negative — good</div>'); }
-  var ael=document.getElementById('allStats'); ael.className='';
-  ael.innerHTML=st.map(function(r){ if(r.v===''){ return '<div class="statgrp">'+r.k+'</div>'; } var n=Number(r.v), col=isFinite(n)?(n>0?'var(--long)':n<0?'var(--short)':'var(--txt)'):'var(--mut)'; return '<div class="statrow"><span class="mut">'+r.k+'</span><b class="mono" style="color:'+col+'">'+r.v+'</b></div>'; }).join('');
+  var st=(S.stats&&typeof S.stats==='object'&&!Array.isArray(S.stats))?S.stats:{overall:{},gates:[],pairs:[]};
+  var o=st.overall||{};
+  document.getElementById('kpis').innerHTML=kpi(o.trades!=null?o.trades:'–','closed')+kpi(o.avgR!=null?o.avgR:'–','expectancy R')+kpi(o.winRate!=null?o.winRate+'%':'–','win rate');
+  // gate skip-analysis in the "combos" card
+  var cel=document.getElementById('combos'); var gates=st.gates||[];
+  if(!gates.length){ cel.className='empty'; cel.textContent='No gate data yet.'; }
+  else { cel.className=''; cel.innerHTML='<div class="statgrp">GATE SKIP-ANALYSIS</div>'+gates.map(function(g){
+      var col=(g.verdict&&g.verdict.indexOf('matters')>=0)?'var(--long)':(g.verdict&&g.verdict.indexOf('skip')>=0)?'var(--short)':'var(--mut)';
+      return '<div class="statrow"><span>Gate '+g.gate+' <span class="xs mut">tick '+g.tickedWin+'% (n'+g.tickedTrades+') · skip '+g.skippedWin+'% (n'+g.skippedTrades+')</span></span><b class="xs" style="color:'+col+'">'+(g.verdict||'')+'</b></div>';
+    }).join(''); }
+  // pair breakdown in "allStats"
+  var ael=document.getElementById('allStats'); var pairs=st.pairs||[];
+  if(!pairs.length){ ael.className='empty'; ael.textContent='No closed trades yet.'; }
+  else { ael.className=''; ael.innerHTML='<div class="statgrp">BY PAIR</div>'+pairs.map(function(p){
+      var col=p.R>0?'var(--long)':p.R<0?'var(--short)':'var(--txt)';
+      return '<div class="statrow"><span class="mut">'+p.pair+' <span class="xs">'+p.win+'% (n'+p.trades+')</span></span><b class="mono" style="color:'+col+'">'+(p.R>0?'+':'')+p.R+'R</b></div>';
+    }).join(''); }
 }
 function comboLine(e){ var col=e.avg>0?'var(--long)':'var(--short)'; return '<div class="statrow"><span>'+e.k+' <span class="xs mut">n'+e.n+'</span></span><b class="mono" style="color:'+col+'">'+(e.avg>0?'+':'')+e.avg+'R</b></div>'; }
 function kpi(v,l){ return '<div class="k"><div class="v mono">'+v+'</div><div class="l">'+l+'</div></div>'; }
