@@ -302,8 +302,9 @@ function renderManualYields(){
     var missTxt=miss.length? '<span class="xs r">missing: '+miss.slice(0,5).join(', ')+(miss.length>5?'…':'')+'</span>' : '<span class="xs g">up to date ✅</span>';
     var dateOpts=recentWeekdays(12).map(function(d){return '<option value="'+d+'">'+d+(missSet[d]?'  • missing':'  ✓ filled')+'</option>';}).join('');
     return '<div style="margin:8px 0;padding-bottom:8px;border-bottom:1px solid rgba(128,128,128,.15)">'+
-      '<div class="between"><b class="mono">'+m.ccy+' 2Y</b>'+missTxt+'</div>'+
+      '<div class="between"><b class="mono">'+m.ccy+'</b>'+missTxt+'</div>'+
       '<div class="row" style="margin-top:6px">'+
+        '<select id="myt_'+m.ccy+'" class="mono" style="width:62px"><option value="2Y">2Y</option><option value="10Y">10Y</option></select>'+
         '<select id="myd_'+m.ccy+'" class="mono" style="flex:1">'+dateOpts+'</select>'+
         '<input id="myv_'+m.ccy+'" class="mono" placeholder="yield %" inputmode="decimal" style="flex:1">'+
         '<button id="myb_'+m.ccy+'" class="btn good sm" onclick="logManualYield(\''+m.ccy+'\')">Log</button>'+
@@ -314,6 +315,7 @@ function renderManualYields(){
 }
 async function logManualYield(ccy){
   var d=document.getElementById('myd_'+ccy).value;
+  var tenor=document.getElementById('myt_'+ccy).value;
   var vEl=document.getElementById('myv_'+ccy), v=vEl.value.trim();
   var msg=document.getElementById('mym_'+ccy), btn=document.getElementById('myb_'+ccy);
   function say(t,c){ if(msg){ msg.textContent=t; msg.style.color=c; } }
