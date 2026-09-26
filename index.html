@@ -283,34 +283,52 @@ function renderStrip(){
   document.getElementById('stripEvent').innerHTML=ev?('<span class="amber">⚠ '+ev.ccy+' '+ev.inTxt+'</span>'):'';
 }
 
+function recentWeekdays(n){
+  var out=[], dt=new Date();
+  while(out.length<n){
+    var day=dt.getDay();
+    if(day!==0&&day!==6){ out.push(dt.getFullYear()+'-'+('0'+(dt.getMonth()+1)).slice(-2)+'-'+('0'+dt.getDate()).slice(-2)); }
+    dt.setDate(dt.getDate()-1);
+  }
+  return out;
+}
 function renderManualYields(){
   var el=document.getElementById('manualYields'); if(!el) return;
   var ms=(S&&S.manualStatus)?S.manualStatus:[];
   if(!ms.length){ el.className='empty'; el.textContent='No manual currencies.'; return; }
   el.className='';
   el.innerHTML=ms.map(function(m){
-    var miss=m.missing2y||[];
+    var miss=m.missing2y||[], missSet={}; miss.forEach(function(d){missSet[d]=1;});
     var missTxt=miss.length? '<span class="xs r">missing: '+miss.slice(0,5).join(', ')+(miss.length>5?'…':'')+'</span>' : '<span class="xs g">up to date ✅</span>';
-    var dateOpts=miss.map(function(d){return '<option value="'+d+'">'+d+'</option>';}).join('');
+    var dateOpts=recentWeekdays(12).map(function(d){return '<option value="'+d+'">'+d+(missSet[d]?'  • missing':'  ✓ filled')+'</option>';}).join('');
     return '<div style="margin:8px 0;padding-bottom:8px;border-bottom:1px solid rgba(128,128,128,.15)">'+
       '<div class="between"><b class="mono">'+m.ccy+' 2Y</b>'+missTxt+'</div>'+
       '<div class="row" style="margin-top:6px">'+
         '<select id="myd_'+m.ccy+'" class="mono" style="flex:1">'+dateOpts+'</select>'+
         '<input id="myv_'+m.ccy+'" class="mono" placeholder="yield %" inputmode="decimal" style="flex:1">'+
-        '<button class="btn good sm" onclick="logManualYield(\''+m.ccy+'\')">Log</button>'+
+        '<button id="myb_'+m.ccy+'" class="btn good sm" onclick="logManualYield(\''+m.ccy+'\')">Log</button>'+
       '</div>'+
+      '<div id="mym_'+m.ccy+'" class="xs" style="margin-top:5px;min-height:15px"></div>'+
     '</div>';
   }).join('');
 }
 async function logManualYield(ccy){
   var d=document.getElementById('myd_'+ccy).value;
-  var v=document.getElementById('myv_'+ccy).value.trim();
-  if(!d){ alert('No date selected'); return; }
-  if(!v){ alert('Enter yield value'); return; }
+  var vEl=document.getElementById('myv_'+ccy), v=vEl.value.trim();
+  var msg=document.getElementById('mym_'+ccy), btn=document.getElementById('myb_'+ccy);
+  function say(t,c){ if(msg){ msg.textContent=t; msg.style.color=c; } }
+  if(!d){ say('pick a date','var(--short)'); return; }
+  if(!v){ say('enter a value','var(--short)'); return; }
+  if(btn) btn.disabled=true;                 // block double-submit
+  say('saving…','var(--mut)');
   try{
     var j=await push({type:'manualYield',currency:ccy,tenor:'2Y',date:d,value:v});
-    if(j.ok){ refresh(); } else alert('Error: '+(j.err||'?'));
-  }catch(e){ alert('Failed — offline?'); }
+    if(j.ok){
+      say('✅ saved '+ccy+' '+v+' ('+d+')','var(--long)');
+      vEl.value='';
+      setTimeout(refresh,1400);              // let the tick show, then update the list
+    } else { say('error: '+(j.err||'?'),'var(--short)'); if(btn) btn.disabled=false; }
+  }catch(e){ say('failed — offline?','var(--short)'); if(btn) btn.disabled=false; }
 }
 function renderStrength(){
   var el=document.getElementById('strengthChart'); if(!el) return;
