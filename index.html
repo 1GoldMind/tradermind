@@ -512,11 +512,18 @@ function updateTicket(){
 }
 async function logTrade(){
   if(!CFG.url){ msg('logMsg','Connect first (More ▸ Settings).'); return; }
+  var pair=document.getElementById('tPair').value, dir=segVal('tDir');
+  var c=(pairInfo(pair).c)||{};                       // freeze the scores at entry
+  var conv=String(c.Conviction||''), cd=conv.indexOf('LONG')>=0?'Long':conv.indexOf('SHORT')>=0?'Short':'';
+  var aligned=!cd?'neutral':(dir===cd?'aligned':'conflict');
   var steps=(S&&S.playbook)?S.playbook:[], pct=steps.length?Math.round(GATE.filter(Boolean).length/steps.length*100):0, tk=document.getElementById('ticket');
-  var body={type:'entry',pair:document.getElementById('tPair').value,dir:segVal('tDir'),setup:segVal('tSetup'),entryDT:new Date().toISOString(),
+  var body={type:'entry',pair:pair,dir:dir,setup:segVal('tSetup'),entryDT:new Date().toISOString(),
     entry:val('tEntry'),sl:val('tSL'),tp1:val('tTP1'),tp2:val('tTP2'),lots:val('tLots'),risk:val('tRisk'),checklist:pct,
     gates:GATE.map(function(g,i){return g?(i+1):null;}).filter(function(x){return x;}).join(','),
-    ticket:tk.dataset.ticket||'',breach:tk.dataset.breach||'',mode:document.getElementById('tBT').checked?'BT':'Live'};
+    ticket:tk.dataset.ticket||'',breach:tk.dataset.breach||'',mode:document.getElementById('tBT').checked?'BT':'Live',
+    conviction:conv, stBias:(c.ST||''), ltBias:(c.LT||''),
+    stScore:(c.STscore==null?'':c.STscore), ltScore:(c.LTscore==null?'':c.LTscore),
+    carry:(c['Score (-20..+20)']==null?'':c['Score (-20..+20)']), aligned:aligned};
   msg('logMsg','Saving…');
   try{ var j=await push(body); if(j.ok){ msg('logMsg','Logged '+j.id+'.'); GATE=[]; ['tEntry','tSL','tTP1','tTP2','tLots'].forEach(id=>document.getElementById(id).value=''); refresh(); } else msg('logMsg','Error: '+(j.err||'?')); }
   catch(e){ msg('logMsg','Failed — offline?'); }
