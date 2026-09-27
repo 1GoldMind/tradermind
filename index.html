@@ -296,7 +296,7 @@ var MY={};   // per-ccy missing lists, for the tenor-aware date dropdown
 function myMissList(ccy,tenor){ var m=MY[ccy]||{}; return (tenor==='10Y'?m.missing10y:m.missing2y)||[]; }
 function myDateOpts(ccy,tenor){
   var missSet={}; myMissList(ccy,tenor).forEach(function(d){missSet[d]=1;});
-  return recentWeekdays(12).map(function(d){return '<option value="'+d+'">'+d+(missSet[d]?'  • missing':'  ✓ filled')+'</option>';}).join('');
+  return recentWeekdays(10).map(function(d){return '<option value="'+d+'">'+d+(missSet[d]?'  • missing':'  ✓ filled')+'</option>';}).join('');
 }
 function myMissTxt(ccy,tenor){
   var miss=myMissList(ccy,tenor);
