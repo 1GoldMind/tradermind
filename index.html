@@ -335,16 +335,27 @@ async function logManualYield(ccy){
   function say(t,c){ if(msg){ msg.textContent=t; msg.style.color=c; } }
   if(!d){ say('pick a date','var(--short)'); return; }
   if(!v){ say('enter a value','var(--short)'); return; }
-  if(btn) btn.disabled=true;                 // block double-submit
+  if(btn) btn.disabled=true;                 // block double-submit while this one is in flight
   say('saving…','var(--mut)');
   try{
     var j=await push({type:'manualYield',currency:ccy,tenor:tenor,date:d,value:v});
     if(j.ok){
       say('✅ saved '+ccy+' '+tenor+' '+v+' ('+d+')','var(--long)');
       vEl.value='';
-      setTimeout(refresh,1400);              // let the tick show, then update the list
-    } else { say('error: '+(j.err||'?'),'var(--short)'); if(btn) btn.disabled=false; }
-  }catch(e){ say('failed — offline?','var(--short)'); if(btn) btn.disabled=false; }
+      markYieldFilled(ccy,tenor,d);          // update the list locally — instant, no slow server refresh
+    } else { say('error: '+(j.err||'?'),'var(--short)'); }
+  }catch(e){ say('failed — try again','var(--short)'); }
+  if(btn) btn.disabled=false;                // ALWAYS re-enable so the next entry logs
+}
+// flip a date to "filled" in the local list and redraw only that currency's dropdown (no network)
+function markYieldFilled(ccy,tenor,dateStr){
+  var m=MY[ccy]; if(!m) return;
+  var key=tenor==='10Y'?'missing10y':'missing2y';
+  if(m[key]) m[key]=m[key].filter(function(x){return x!==dateStr;});
+  try{ if(S&&S.manualStatus){ S.manualStatus.forEach(function(s){ if(s.ccy===ccy&&s[key]) s[key]=s[key].filter(function(x){return x!==dateStr;}); }); localStorage.setItem('tm_state',JSON.stringify(S)); } }catch(_){}
+  var t=document.getElementById('myt_'+ccy).value;
+  var dd=document.getElementById('myd_'+ccy); if(dd) dd.innerHTML=myDateOpts(ccy,t);
+  var tt=document.getElementById('mytx_'+ccy); if(tt) tt.innerHTML=myMissTxt(ccy,t);
 }
 function renderStrength(){
   var el=document.getElementById('strengthChart'); if(!el) return;
