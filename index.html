@@ -52,6 +52,18 @@
   .brow{display:grid;grid-template-columns:78px 62px 1fr 34px;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}
   .brow:last-child{border-bottom:none}
   .brow.stale{opacity:.5}
+  .prow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+  .prow:last-child{border-bottom:none}
+  .prow.stale{opacity:.5}
+  .prow .pl{min-width:0}
+  .prow .pn{font-size:15px;font-weight:700;letter-spacing:.4px}
+  .prow .pd{font-size:11.5px;color:var(--mut);margin-top:3px;white-space:nowrap;font-family:ui-monospace,monospace}
+  .conv{flex:none;font-size:11.5px;font-weight:700;padding:5px 11px;border-radius:999px;white-space:nowrap;text-align:center}
+  .conv.long{background:rgba(63,178,127,.16);color:var(--long)}
+  .conv.short{background:rgba(229,103,78,.16);color:var(--short)}
+  .conv.neu{background:rgba(136,148,168,.16);color:var(--mut)}
+  .conv.split{background:rgba(232,178,58,.16);color:var(--accent)}
+  .bup{color:var(--long)}.bdn{color:var(--short)}.bfl{color:var(--mut)}
   .stalebadge{font-size:9.5px;color:var(--accent);margin-left:4px}
   nav{position:fixed;bottom:0;left:0;right:0;max-width:520px;margin:0 auto;display:flex;background:#0B0E14;border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
   nav button{flex:1;background:none;border-radius:0;padding:9px 2px 8px;color:var(--mut);font-size:10.5px;font-weight:600;display:flex;flex-direction:column;align-items:center;gap:3px}
@@ -112,7 +124,7 @@
     <div id="strengthChart" class="empty">—</div>
   </div>
   <div class="card">
-    <div class="between"><h3>Macro bias — pairs ranked</h3><span class="xs mut">rate differential</span></div>
+    <div class="between"><h3>Conviction — pairs ranked</h3><span class="xs mut">2Y / 10Y momentum</span></div>
     <div id="biasBoard" class="empty">—</div>
   </div>
   <div class="card">
@@ -376,14 +388,20 @@ function renderStrength(){
     '</div>';
   }).join('');
 }
-function miniBias(x){
+function biasArrow(x){
   x=String(x||'');
-  if(x==='Long')  return '<span style="color:var(--long)">L</span>';
-  if(x==='Short') return '<span style="color:var(--short)">S</span>';
-  if(x==='Flat')  return '<span style="color:var(--mut)">·</span>';
-  return '<span style="color:var(--mut)">?</span>';
+  if(x==='Long')  return '<span class="bup">▲</span>';
+  if(x==='Short') return '<span class="bdn">▼</span>';
+  if(x==='Flat')  return '<span class="bfl">–</span>';
+  return '<span class="bfl">·</span>';
 }
-function convClass(conv){ conv=String(conv||''); return conv.indexOf('LONG')>=0?'long':conv.indexOf('SHORT')>=0?'short':conv.indexOf('Split')>=0?'short':'neu'; }
+function fmtSc(n){ n=Number(n)||0; return (n>0?'+':'')+n.toFixed(2); }
+function convClass(conv){ conv=String(conv||'');
+  if(conv.indexOf('LONG')>=0||conv.indexOf('Lean long')>=0) return 'long';
+  if(conv.indexOf('SHORT')>=0||conv.indexOf('Lean short')>=0) return 'short';
+  if(conv.indexOf('Split')>=0) return 'split';
+  return 'neu';
+}
 function renderPrep(){
   var el=document.getElementById('biasBoard');
   if(!S||!S.cot||!S.cot.length){ el.className='empty'; el.textContent='No bias data.'; return; }
@@ -391,11 +409,13 @@ function renderPrep(){
   el.innerHTML=S.cot.map(function(c){
     var conv=String(c.Conviction||'—');
     var stale=c.stale?(' <span class="stalebadge">⚠'+(c.staleLegs||'old')+'</span>'):'';
-    return '<div class="brow'+(c.stale?' stale':'')+'">'+
-      '<b class="mono" style="width:70px">'+c.Pair+stale+'</b>'+
-      '<span class="pill '+convClass(conv)+'" style="min-width:104px;text-align:center">'+conv+'</span>'+
-      '<span class="xs mono" style="margin-left:8px;white-space:nowrap">ST '+miniBias(c.ST)+'  LT '+miniBias(c.LT)+'</span>'+
-      '<span class="xs mut mono" style="margin-left:auto">'+(c.STscore>0?'+':'')+c.STscore+' / '+(c.LTscore>0?'+':'')+c.LTscore+'</span></div>';
+    return '<div class="prow'+(c.stale?' stale':'')+'">'+
+      '<div class="pl">'+
+        '<div class="pn mono">'+c.Pair+stale+'</div>'+
+        '<div class="pd">ST '+biasArrow(c.ST)+' '+fmtSc(c.STscore)+'  ·  LT '+biasArrow(c.LT)+' '+fmtSc(c.LTscore)+'</div>'+
+      '</div>'+
+      '<span class="conv '+convClass(conv)+'">'+conv+'</span>'+
+    '</div>';
   }).join('');
 }
 
