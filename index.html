@@ -276,9 +276,9 @@ function renderStrip(){
   if(!S) return;
   var reg=(S.regime||'').toUpperCase(), p=document.getElementById('regimePill');
   p.textContent=reg||'—'; p.className='regime '+(reg.indexOf('OFF')>=0?'off':reg.indexOf('ON')>=0?'on':'tr');
-  var top=(S.cot||[]).filter(c=>Math.abs(c['Score (-20..+20)'])>=3).slice(0,3)
-    .map(c=>c.Pair+' '+(c['Score (-20..+20)']>0?'+':'')+c['Score (-20..+20)']).join('   ');
-  document.getElementById('stripBias').textContent=top||'no strong bias';
+  var top=(S.cot||[]).filter(function(c){return String(c.Conviction||'').indexOf('STRONG')>=0;}).slice(0,3)
+    .map(function(c){return c.Pair+' '+(String(c.Conviction).indexOf('LONG')>=0?'▲':'▼');}).join('   ');
+  document.getElementById('stripBias').textContent=top||'no strong conviction';
   var ev=nextEvent();
   document.getElementById('stripEvent').innerHTML=ev?('<span class="amber">⚠ '+ev.ccy+' '+ev.inTxt+'</span>'):'';
 }
@@ -376,20 +376,26 @@ function renderStrength(){
     '</div>';
   }).join('');
 }
+function miniBias(x){
+  x=String(x||'');
+  if(x==='Long')  return '<span style="color:var(--long)">L</span>';
+  if(x==='Short') return '<span style="color:var(--short)">S</span>';
+  if(x==='Flat')  return '<span style="color:var(--mut)">·</span>';
+  return '<span style="color:var(--mut)">?</span>';
+}
+function convClass(conv){ conv=String(conv||''); return conv.indexOf('LONG')>=0?'long':conv.indexOf('SHORT')>=0?'short':conv.indexOf('Split')>=0?'short':'neu'; }
 function renderPrep(){
   var el=document.getElementById('biasBoard');
   if(!S||!S.cot||!S.cot.length){ el.className='empty'; el.textContent='No bias data.'; return; }
   el.className='';
-  el.innerHTML=S.cot.slice(0,14).map(function(c){
-    var s=c['Score (-20..+20)'], w=Math.min(50,Math.abs(s)/20*50);
-    var col=s>0?'var(--long)':s<0?'var(--short)':'var(--mut)';
-    var side=s>0?'left:50%':'right:50%';
-    var dir=String(c.Bias).split(' ')[0], strong=String(c.Bias).indexOf('STRONG')>=0;
+  el.innerHTML=S.cot.map(function(c){
+    var conv=String(c.Conviction||'—');
     var stale=c.stale?(' <span class="stalebadge">⚠'+(c.staleLegs||'old')+'</span>'):'';
-    return '<div class="brow'+(c.stale?' stale':'')+'"><b class="mono">'+c.Pair+stale+'</b>'+
-      '<span class="pill '+(s>0?'long':s<0?'short':'neu')+'">'+dir+(strong?'*':'')+'</span>'+
-      '<span class="sbar"><span class="mid"></span><span class="fill" style="'+side+';width:'+w+'%;background:'+col+'"></span></span>'+
-      '<b class="mono" style="text-align:right;color:'+col+'">'+(s>0?'+':'')+s+'</b></div>';
+    return '<div class="brow'+(c.stale?' stale':'')+'">'+
+      '<b class="mono" style="width:70px">'+c.Pair+stale+'</b>'+
+      '<span class="pill '+convClass(conv)+'" style="min-width:104px;text-align:center">'+conv+'</span>'+
+      '<span class="xs mono" style="margin-left:8px;white-space:nowrap">ST '+miniBias(c.ST)+'  LT '+miniBias(c.LT)+'</span>'+
+      '<span class="xs mut mono" style="margin-left:auto">'+(c.STscore>0?'+':'')+c.STscore+' / '+(c.LTscore>0?'+':'')+c.LTscore+'</span></div>';
   }).join('');
 }
 
@@ -450,12 +456,16 @@ function fillPairs(){ var sel=document.getElementById('tPair'), cur=sel.value;
 function pairInfo(pair){ var c=(S&&S.cot||[]).find(x=>x.Pair===pair); var ctx=(S&&S.chart||[]).find(x=>String(x.Pair).toUpperCase()===pair.toUpperCase()); return {c:c,ctx:ctx}; }
 function renderToday(){
   var pair=document.getElementById('tPair').value, dir=segVal('tDir'), info=pairInfo(pair), read=document.getElementById('pairRead');
-  if(info.c){ var s=info.c['Score (-20..+20)'];
-    var aligned=Math.abs(s)<1?'neutral':((dir==='Long'&&s>0)||(dir==='Short'&&s<0))?'aligned':'conflict';
+  if(info.c){
+    var conv=String(info.c.Conviction||'—');
+    var cd=conv.indexOf('LONG')>=0?'Long':conv.indexOf('SHORT')>=0?'Short':'';
+    var aligned=!cd?'neutral':(dir===cd?'aligned':'conflict');
     var col=aligned==='aligned'?'var(--long)':aligned==='conflict'?'var(--short)':'var(--mut)';
     var staleTxt=info.c.stale?(' · <span class="amber">⚠ '+(info.c.staleLegs||'stale')+' data old</span>'):'';
     var ctxTxt=info.ctx?('CTX '+fmt(info.ctx.CTX)+' · ADR left '+fmt(info.ctx['ADR left %'])+'% · %R '+fmt(info.ctx['D%R'])+' · untap '+fmt(info.ctx.Untapped)):'no live context for this pair';
-    read.innerHTML='<div class="between" style="margin-top:6px"><span>Macro: <b class="mono" style="color:'+col+'">'+(s>0?'+':'')+s+'</b> '+String(info.c.Bias)+staleTxt+'</span><span class="pill '+(aligned==='aligned'?'long':aligned==='conflict'?'short':'neu')+'">'+aligned+'</span></div><div class="xs mut mono" style="margin-top:6px">'+ctxTxt+'</div>';
+    read.innerHTML='<div class="between" style="margin-top:6px"><span><b class="mono" style="color:'+col+'">'+conv+'</b>'+staleTxt+'</span><span class="pill '+(aligned==='aligned'?'long':aligned==='conflict'?'short':'neu')+'">'+aligned+'</span></div>'+
+      '<div class="xs mut mono" style="margin-top:4px">ST '+String(info.c.ST||'—')+' ('+(info.c.STscore>0?'+':'')+info.c.STscore+') · LT '+String(info.c.LT||'—')+' ('+(info.c.LTscore>0?'+':'')+info.c.LTscore+') · carry '+(info.c['Score (-20..+20)']>0?'+':'')+info.c['Score (-20..+20)']+'</div>'+
+      '<div class="xs mut mono" style="margin-top:4px">'+ctxTxt+'</div>';
   } else read.innerHTML='<div class="xs mut" style="margin-top:6px">No macro score for this pair (e.g. gold) — trade it on TA only.</div>';
   renderGate();
 }
@@ -473,7 +483,7 @@ function updateTicket(){
   document.getElementById('chkPct').textContent=pct+'%';
   var pair=document.getElementById('tPair').value, dir=segVal('tDir'), info=pairInfo(pair), breach=[];
   if(pct<100) breach.push('checklist '+pct+'%');
-  if(info.c){ var s=info.c['Score (-20..+20)']; if(dir==='Long'&&s<3) breach.push('macro not long'); if(dir==='Short'&&s>-3) breach.push('macro not short'); }
+  if(info.c){ var conv=String(info.c.Conviction||''); var cd=conv.indexOf('LONG')>=0?'Long':conv.indexOf('SHORT')>=0?'Short':''; if(cd&&dir!==cd) breach.push('conviction '+cd.toLowerCase()); }
   if(S&&S.today&&S.settings&&S.today.trades>=Number(S.settings.max_trades_per_day||99)) breach.push('max trades hit');
   if(S&&S.risk_allowed===0) breach.push('daily loss limit');
   var t=document.getElementById('ticket');
