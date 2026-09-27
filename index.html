@@ -292,20 +292,34 @@ function recentWeekdays(n){
   }
   return out;
 }
+var MY={};   // per-ccy missing lists, for the tenor-aware date dropdown
+function myMissList(ccy,tenor){ var m=MY[ccy]||{}; return (tenor==='10Y'?m.missing10y:m.missing2y)||[]; }
+function myDateOpts(ccy,tenor){
+  var missSet={}; myMissList(ccy,tenor).forEach(function(d){missSet[d]=1;});
+  return recentWeekdays(12).map(function(d){return '<option value="'+d+'">'+d+(missSet[d]?'  • missing':'  ✓ filled')+'</option>';}).join('');
+}
+function myMissTxt(ccy,tenor){
+  var miss=myMissList(ccy,tenor);
+  return miss.length? '<span class="xs r">'+tenor+' missing: '+miss.slice(0,5).join(', ')+(miss.length>5?'…':'')+'</span>' : '<span class="xs g">'+tenor+' up to date ✅</span>';
+}
+function myTenorChange(ccy){   // re-draw date markers + top text for the newly chosen tenor
+  var t=document.getElementById('myt_'+ccy).value;
+  var dd=document.getElementById('myd_'+ccy); if(dd) dd.innerHTML=myDateOpts(ccy,t);
+  var tt=document.getElementById('mytx_'+ccy); if(tt) tt.innerHTML=myMissTxt(ccy,t);
+}
 function renderManualYields(){
   var el=document.getElementById('manualYields'); if(!el) return;
   var ms=(S&&S.manualStatus)?S.manualStatus:[];
   if(!ms.length){ el.className='empty'; el.textContent='No manual currencies.'; return; }
-  el.className='';
+  el.className=''; MY={};
   el.innerHTML=ms.map(function(m){
-    var miss=m.missing2y||[], missSet={}; miss.forEach(function(d){missSet[d]=1;});
-    var missTxt=miss.length? '<span class="xs r">missing: '+miss.slice(0,5).join(', ')+(miss.length>5?'…':'')+'</span>' : '<span class="xs g">up to date ✅</span>';
-    var dateOpts=recentWeekdays(12).map(function(d){return '<option value="'+d+'">'+d+(missSet[d]?'  • missing':'  ✓ filled')+'</option>';}).join('');
+    MY[m.ccy]={missing2y:m.missing2y||[], missing10y:m.missing10y||[]};
+    var t='2Y';   // default tenor shown on first render
     return '<div style="margin:8px 0;padding-bottom:8px;border-bottom:1px solid rgba(128,128,128,.15)">'+
-      '<div class="between"><b class="mono">'+m.ccy+'</b>'+missTxt+'</div>'+
+      '<div class="between"><b class="mono">'+m.ccy+'</b><span id="mytx_'+m.ccy+'">'+myMissTxt(m.ccy,t)+'</span></div>'+
       '<div class="row" style="margin-top:6px">'+
-        '<select id="myt_'+m.ccy+'" class="mono" style="width:62px"><option value="2Y">2Y</option><option value="10Y">10Y</option></select>'+
-        '<select id="myd_'+m.ccy+'" class="mono" style="flex:1">'+dateOpts+'</select>'+
+        '<select id="myt_'+m.ccy+'" class="mono" style="width:62px" onchange="myTenorChange(\''+m.ccy+'\')"><option value="2Y">2Y</option><option value="10Y">10Y</option></select>'+
+        '<select id="myd_'+m.ccy+'" class="mono" style="flex:1">'+myDateOpts(m.ccy,t)+'</select>'+
         '<input id="myv_'+m.ccy+'" class="mono" placeholder="yield %" inputmode="decimal" style="flex:1">'+
         '<button id="myb_'+m.ccy+'" class="btn good sm" onclick="logManualYield(\''+m.ccy+'\')">Log</button>'+
       '</div>'+
@@ -324,9 +338,9 @@ async function logManualYield(ccy){
   if(btn) btn.disabled=true;                 // block double-submit
   say('saving…','var(--mut)');
   try{
-    var j=await push({type:'manualYield',currency:ccy,tenor:'2Y',date:d,value:v});
+    var j=await push({type:'manualYield',currency:ccy,tenor:tenor,date:d,value:v});
     if(j.ok){
-      say('✅ saved '+ccy+' '+v+' ('+d+')','var(--long)');
+      say('✅ saved '+ccy+' '+tenor+' '+v+' ('+d+')','var(--long)');
       vEl.value='';
       setTimeout(refresh,1400);              // let the tick show, then update the list
     } else { say('error: '+(j.err||'?'),'var(--short)'); if(btn) btn.disabled=false; }
