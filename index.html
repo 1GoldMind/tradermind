@@ -64,6 +64,8 @@
   .conv.neu{background:rgba(136,148,168,.16);color:var(--mut)}
   .conv.split{background:rgba(232,178,58,.16);color:var(--accent)}
   .bup{color:var(--long)}.bdn{color:var(--short)}.bfl{color:var(--mut)}
+  .prow .pr{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex:none}
+  .turnbadge{font-size:10.5px;font-weight:700;color:var(--accent);white-space:nowrap}
   .stalebadge{font-size:9.5px;color:var(--accent);margin-left:4px}
   nav{position:fixed;bottom:0;left:0;right:0;max-width:520px;margin:0 auto;display:flex;background:#0B0E14;border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
   nav button{flex:1;background:none;border-radius:0;padding:9px 2px 8px;color:var(--mut);font-size:10.5px;font-weight:600;display:flex;flex-direction:column;align-items:center;gap:3px}
@@ -408,13 +410,17 @@ function renderPrep(){
   el.className='';
   el.innerHTML=S.cot.map(function(c){
     var conv=String(c.Conviction||'—');
+    var turn=String(c.Turn||'');
     var stale=c.stale?(' <span class="stalebadge">⚠'+(c.staleLegs||'old')+'</span>'):'';
     return '<div class="prow'+(c.stale?' stale':'')+'">'+
       '<div class="pl">'+
         '<div class="pn mono">'+c.Pair+stale+'</div>'+
         '<div class="pd">ST '+biasArrow(c.ST)+' '+fmtSc(c.STscore)+'  ·  LT '+biasArrow(c.LT)+' '+fmtSc(c.LTscore)+'</div>'+
       '</div>'+
-      '<span class="conv '+convClass(conv)+'">'+conv+'</span>'+
+      '<div class="pr">'+
+        '<span class="conv '+convClass(conv)+'">'+conv+'</span>'+
+        (turn?'<div class="turnbadge">'+turn+'</div>':'')+
+      '</div>'+
     '</div>';
   }).join('');
 }
