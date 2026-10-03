@@ -114,7 +114,8 @@
   <span class="regime tr" id="regimePill">— </span>
   <span class="sm mut" id="stripBias">connect to load</span>
   <span class="sm" id="stripEvent" style="margin-left:auto"></span>
-  <span class="xs mut" style="opacity:.5">v12</span>
+  <span class="xs mut mono" id="syncStamp"></span>
+  <span class="xs mut" style="opacity:.5">v13</span>
 </div>
 
 <!-- PREP -->
@@ -141,11 +142,11 @@
 
   <div class="card">
     <div class="grid2">
-      <label class="fld">Pair<select id="tPair" onchange="renderToday()"></select></label>
+      <label class="fld">Pair<select id="tPair" onchange="renderToday();saveDraft()"></select></label>
       <label class="fld">Direction
         <div class="seg" id="tDir">
-          <button data-v="Long" class="on" onclick="segPick('tDir',this);renderToday()">Long</button>
-          <button data-v="Short" onclick="segPick('tDir',this);renderToday()">Short</button>
+          <button data-v="Long" class="on" onclick="segPick('tDir',this);renderToday();saveDraft()">Long</button>
+          <button data-v="Short" onclick="segPick('tDir',this);renderToday();saveDraft()">Short</button>
         </div></label>
     </div>
     <div id="pairRead" class="sm"></div>
@@ -160,18 +161,20 @@
   <div class="card">
     <h3>Setup</h3>
     <div class="seg" id="tSetup" style="margin:8px 0">
-      <button data-v="Fakeout" class="on" onclick="segPick('tSetup',this)">Fakeout</button>
-      <button data-v="Breakout" onclick="segPick('tSetup',this)">Breakout</button>
+      <button data-v="Fakeout" class="on" onclick="segPick('tSetup',this);saveDraft()">Fakeout</button>
+      <button data-v="Breakout" onclick="segPick('tSetup',this);saveDraft()">Breakout</button>
     </div>
     <div class="grid2">
-      <label class="fld">Entry<input id="tEntry" class="mono" inputmode="decimal"></label>
-      <label class="fld">Stop<input id="tSL" class="mono" inputmode="decimal"></label>
-      <label class="fld">TP1<input id="tTP1" class="mono" inputmode="decimal"></label>
-      <label class="fld">TP2<input id="tTP2" class="mono" inputmode="decimal"></label>
-      <label class="fld">Lots<input id="tLots" class="mono" inputmode="decimal"></label>
-      <label class="fld">Risk %<input id="tRisk" class="mono" inputmode="decimal" value="1"></label>
+      <label class="fld">Entry<input id="tEntry" class="mono" inputmode="decimal" oninput="updRR();saveDraft()"></label>
+      <label class="fld">Stop<input id="tSL" class="mono" inputmode="decimal" oninput="updRR();saveDraft()"></label>
+      <label class="fld">TP1<input id="tTP1" class="mono" inputmode="decimal" oninput="updRR();saveDraft()"></label>
+      <label class="fld">TP2<input id="tTP2" class="mono" inputmode="decimal" oninput="updRR();saveDraft()"></label>
+      <label class="fld">Lots<input id="tLots" class="mono" inputmode="decimal" oninput="saveDraft()"></label>
+      <label class="fld">Risk %<input id="tRisk" class="mono" inputmode="decimal" value="1" oninput="saveDraft()"></label>
     </div>
-    <label class="row sm" style="margin:2px 0 8px"><input type="checkbox" id="tBT" style="width:auto"> &nbsp;Backtest trade (BT)</label>
+    <div id="rrOut" class="mono sm" style="margin:0 0 8px;min-height:18px"></div>
+    <button class="btn ghost sm" style="margin-bottom:8px" onclick="autoSize()">⚡ Auto-size lots (risk % × stop)</button>
+    <label class="row sm" style="margin:2px 0 8px"><input type="checkbox" id="tBT" style="width:auto" onchange="saveDraft()"> &nbsp;Backtest trade (BT)</label>
     <button class="btn primary block" onclick="logTrade()">Log trade</button>
     <div id="logMsg" class="sm mut" style="margin-top:6px"></div>
   </div>
@@ -180,7 +183,7 @@
   <div class="card">
     <div class="between"><h3>Pip / lot calculator</h3><button class="btn ghost xs" onclick="calcFillFromTrade()">Use trade above</button></div>
     <div class="grid2" style="margin-top:8px">
-      <label class="fld">Balance<input id="pBal" class="mono" inputmode="decimal"></label>
+      <label class="fld">Balance<input id="pBal" class="mono" inputmode="decimal" oninput="try{localStorage.setItem('tm_bal',this.value)}catch(_){}"></label>
       <label class="fld">Risk %<input id="pRisk" class="mono" inputmode="decimal" value="1"></label>
       <label class="fld">Pair<select id="pPair" onchange="pairChanged()"></select></label>
       <label class="fld">Stop (pips)<input id="pSL" class="mono" inputmode="decimal"></label>
@@ -208,7 +211,8 @@
     </div>
   </div>
   <div id="kpis" class="kpi"></div>
-  <div class="card"><h3>Trade more / cut</h3><div id="combos" class="empty">—</div></div>
+  <div class="card"><h3>Equity curve</h3><div id="equity" class="empty">—</div></div>
+  <div class="card"><h3>Edge breakdown</h3><div id="combos" class="empty">—</div></div>
   <div class="card"><h3>All stats</h3><div id="allStats" class="empty">—</div></div>
 </div></section>
 
@@ -248,6 +252,7 @@
 <script>
 var CFG = { url: localStorage.getItem('tm_url')||'', auth: localStorage.getItem('tm_auth')||'TM_SECRET' };
 var S = null, TAB = 'prep';
+var PENDING_PAIR='', LAST_SYNC=Number(localStorage.getItem('tm_sync'))||0, MY_ORDER=[];
 var PAIRS = ["EURUSD","GBPUSD","AUDUSD","NZDUSD","USDJPY","USDCHF","USDCAD",
   "EURJPY","GBPJPY","AUDJPY","NZDJPY","CADJPY","CHFJPY",
   "EURGBP","EURCHF","EURAUD","EURNZD","EURCAD",
@@ -260,14 +265,23 @@ function saveCfg(){
   localStorage.setItem('tm_url',CFG.url); localStorage.setItem('tm_auth',CFG.auth);
   document.getElementById('cfgMsg').textContent='Saved. Connecting…'; refresh();
 }
-async function pull(){ var r=await fetch(CFG.url+'?auth='+encodeURIComponent(CFG.auth)); return await r.json(); }
-async function push(o){ o.auth=CFG.auth; var r=await fetch(CFG.url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(o)}); return await r.json(); }
+// fetch with a timeout, so a dead connection fails fast instead of hanging
+function fetchT(url,opts,ms){
+  var c=('AbortController' in window)?new AbortController():null;
+  opts=opts||{}; if(c){ opts.signal=c.signal; var t=setTimeout(function(){c.abort();},ms); }
+  var p=fetch(url,opts);
+  return c? p.finally(function(){clearTimeout(t);}) : p;
+}
+async function pull(){ var r=await fetchT(CFG.url+'?auth='+encodeURIComponent(CFG.auth),{},15000); return await r.json(); }
+async function push(o){ o.auth=CFG.auth; var r=await fetchT(CFG.url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(o)},20000); return await r.json(); }
 async function refresh(){
   var off=document.getElementById('offline'); off.innerHTML='';
   if(!CFG.url){ off.innerHTML='<div class="banner info">Not connected — add your Web App URL in More ▸ Settings.</div>'; return; }
   try{ var j=await pull();
     if(!j.ok){ off.innerHTML='<div class="banner warn">Server: '+(j.err||'error')+'</div>'; return; }
-    S=j; localStorage.setItem('tm_state',JSON.stringify(j)); renderAll();
+    S=j; LAST_SYNC=Date.now();
+    try{ localStorage.setItem('tm_state',JSON.stringify(j)); localStorage.setItem('tm_sync',LAST_SYNC); }catch(_){}
+    renderAll();
   }catch(e){ var c=localStorage.getItem('tm_state');
     if(c){ S=JSON.parse(c); renderAll(); off.innerHTML='<div class="banner warn">Offline — showing last saved data.</div>'; }
     else off.innerHTML='<div class="banner warn">Can\'t reach server. Check URL/connection.</div>'; }
@@ -279,6 +293,8 @@ function setTab(t){ TAB=t;
 }
 function segPick(id,btn){ document.getElementById(id).querySelectorAll('button').forEach(b=>b.classList.remove('on')); btn.classList.add('on'); }
 function segVal(id){ var b=document.getElementById(id).querySelector('button.on'); return b?b.dataset.v:''; }
+function pickSeg(id,v){ var b=document.getElementById(id).querySelector('button[data-v="'+v+'"]'); if(b) segPick(id,b); }
+function num_(s){ return parseFloat(String(s==null?'':s).replace(',','.')); }   // accepts "4,76" too
 
 function renderAll(){
   [renderStrip,renderStrength,renderManualYields,renderPrep,renderCalendar,fillPairs,fillCalcPairs,renderToday,renderOpen,renderStats].forEach(function(fn){
@@ -295,6 +311,8 @@ function renderStrip(){
   document.getElementById('stripBias').textContent=top||'no strong conviction';
   var ev=nextEvent();
   document.getElementById('stripEvent').innerHTML=ev?('<span class="amber">⚠ '+ev.ccy+' '+ev.inTxt+'</span>'):'';
+  var sy=document.getElementById('syncStamp');
+  if(sy) sy.textContent = LAST_SYNC? ('↻ '+new Date(LAST_SYNC).toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'})) : '';
 }
 
 function recentWeekdays(n){
@@ -325,7 +343,7 @@ function renderManualYields(){
   var el=document.getElementById('manualYields'); if(!el) return;
   var ms=(S&&S.manualStatus)?S.manualStatus:[];
   if(!ms.length){ el.className='empty'; el.textContent='No manual currencies.'; return; }
-  el.className=''; MY={};
+  el.className=''; MY={}; MY_ORDER=ms.map(function(m){return m.ccy;});
   el.innerHTML=ms.map(function(m){
     MY[m.ccy]={missing2y:m.missing2y||[], missing10y:m.missing10y||[]};
     var t='2Y';   // default tenor shown on first render
@@ -348,15 +366,18 @@ async function logManualYield(ccy){
   var msg=document.getElementById('mym_'+ccy), btn=document.getElementById('myb_'+ccy);
   function say(t,c){ if(msg){ msg.textContent=t; msg.style.color=c; } }
   if(!d){ say('pick a date','var(--short)'); return; }
-  if(!v){ say('enter a value','var(--short)'); return; }
+  var vn=num_(v);
+  if(!isFinite(vn)){ say('numbers only, e.g. 4.76','var(--short)'); return; }   // blocks NaN reaching the sheet
   if(btn) btn.disabled=true;                 // block double-submit while this one is in flight
   say('saving…','var(--mut)');
   try{
-    var j=await push({type:'manualYield',currency:ccy,tenor:tenor,date:d,value:v});
+    var j=await push({type:'manualYield',currency:ccy,tenor:tenor,date:d,value:vn});
     if(j.ok){
-      say('✅ saved '+ccy+' '+tenor+' '+v+' ('+d+')','var(--long)');
+      say('✅ saved '+ccy+' '+tenor+' '+vn+' ('+d+')','var(--long)');
       vEl.value='';
       markYieldFilled(ccy,tenor,d);          // update the list locally — instant, no slow server refresh
+      var nx=MY_ORDER[MY_ORDER.indexOf(ccy)+1];                     // hop to the next currency's input
+      if(nx){ var ne=document.getElementById('myv_'+nx); if(ne) ne.focus(); }
     } else { say('error: '+(j.err||'?'),'var(--short)'); }
   }catch(e){ say('failed — try again','var(--short)'); }
   if(btn) btn.disabled=false;                // ALWAYS re-enable so the next entry logs
@@ -474,10 +495,11 @@ function renderCalendar(){
 }
 
 // ---- today ----
-function fillPairs(){ var sel=document.getElementById('tPair'), cur=sel.value;
+function fillPairs(){ var sel=document.getElementById('tPair'), cur=sel.value||PENDING_PAIR;
   var pairs=(S&&S.cot)?S.cot.map(c=>c.Pair):PAIRS;
   sel.innerHTML=pairs.map(p=>'<option>'+p+'</option>').join('');
   if(cur&&pairs.indexOf(cur)>=0) sel.value=cur;
+  PENDING_PAIR='';
 }
 function pairInfo(pair){ var c=(S&&S.cot||[]).find(x=>x.Pair===pair); var ctx=(S&&S.chart||[]).find(x=>String(x.Pair).toUpperCase()===pair.toUpperCase()); return {c:c,ctx:ctx}; }
 function renderToday(){
@@ -493,7 +515,7 @@ function renderToday(){
       '<div class="xs mut mono" style="margin-top:4px">ST '+String(info.c.ST||'—')+' ('+(info.c.STscore>0?'+':'')+info.c.STscore+') · LT '+String(info.c.LT||'—')+' ('+(info.c.LTscore>0?'+':'')+info.c.LTscore+') · carry '+(info.c['Score (-20..+20)']>0?'+':'')+info.c['Score (-20..+20)']+'</div>'+
       '<div class="xs mut mono" style="margin-top:4px">'+ctxTxt+'</div>';
   } else read.innerHTML='<div class="xs mut" style="margin-top:6px">No macro score for this pair (e.g. gold) — trade it on TA only.</div>';
-  renderGate();
+  renderGate(); updRR();
 }
 var GATE=[];
 function renderGate(){
@@ -516,6 +538,59 @@ function updateTicket(){
   if(breach.length){ t.className='ticket red'; t.textContent='VIOLATION — '+breach.join(', '); t.dataset.ticket='VIOLATION'; t.dataset.breach=breach.join('; '); }
   else { t.className='ticket green'; t.textContent='GREEN — cleared to trade'; t.dataset.ticket='GREEN'; t.dataset.breach=''; }
 }
+// live reward:risk readout, updates as you type
+function updRR(){
+  var el=document.getElementById('rrOut'); if(!el) return;
+  var e=num_(val('tEntry')), s=num_(val('tSL')), t1=num_(val('tTP1')), t2=num_(val('tTP2'));
+  if(!(isFinite(e)&&isFinite(s))||e===s){ el.innerHTML=''; return; }
+  var dir=segVal('tDir');
+  var wrong = dir==='Long' ? (s>=e) : (s<=e);
+  if(wrong){ el.innerHTML='<span class="neg">⚠ stop is on the wrong side of entry for a '+dir.toLowerCase()+'</span>'; return; }
+  var risk=Math.abs(e-s), out=[];
+  function one(tp,lab){
+    if(!isFinite(tp)) return;
+    var sideOK = dir==='Long' ? tp>e : tp<e;
+    var rr=Math.abs(tp-e)/risk;
+    var col=!sideOK?'var(--short)':rr>=1.5?'var(--long)':rr>=1?'var(--accent)':'var(--short)';
+    out.push(lab+' <b style="color:'+col+'">1 : '+rr.toFixed(1)+(sideOK?'':' ⚠')+'</b>');
+  }
+  one(t1,'TP1'); one(t2,'TP2');
+  el.innerHTML=out.length?('R:R &nbsp;'+out.join(' &nbsp;·&nbsp; ')):'';
+}
+// fill Lots from balance + risk % + stop distance (uses the pip-calc estimates)
+function autoSize(){
+  var bal=num_(localStorage.getItem('tm_bal')||val('pBal'));
+  if(!(isFinite(bal)&&bal>0)){ msg('logMsg','Set your balance once in the pip calculator below — then this works everywhere.'); return; }
+  var e=num_(val('tEntry')), s=num_(val('tSL')), risk=num_(val('tRisk'));
+  if(!(isFinite(e)&&isFinite(s)&&e!==s&&isFinite(risk)&&risk>0)){ msg('logMsg','Need entry, stop and risk % first.'); return; }
+  var pair=document.getElementById('tPair').value;
+  var pipsz=pair.toUpperCase().indexOf('JPY')>=0?0.01:pair.toUpperCase().indexOf('XAU')>=0?0.1:0.0001;
+  var pips=Math.abs(e-s)/pipsz, pv=pipValueEst(pair);
+  var lots=(bal*risk/100)/(pips*pv);
+  document.getElementById('tLots').value=lots.toFixed(2);
+  msg('logMsg','Sized '+lots.toFixed(2)+' lots — '+Math.round(pips)+' pip stop · est $'+pv+'/pip. Estimate: verify vs broker.');
+  saveDraft();
+}
+// draft autosave — switching tabs or an accidental reload no longer wipes a half-typed trade
+var DRAFT_IDS=['tEntry','tSL','tTP1','tTP2','tLots','tRisk'];
+function saveDraft(){
+  try{
+    var d={pair:document.getElementById('tPair').value, dir:segVal('tDir'), setup:segVal('tSetup'), bt:document.getElementById('tBT').checked};
+    DRAFT_IDS.forEach(function(i){ d[i]=val(i); });
+    localStorage.setItem('tm_draft',JSON.stringify(d));
+  }catch(_){}
+}
+function loadDraft(){
+  try{
+    var d=JSON.parse(localStorage.getItem('tm_draft')||'null'); if(!d) return;
+    DRAFT_IDS.forEach(function(i){ if(d[i]) document.getElementById(i).value=d[i]; });
+    if(d.bt) document.getElementById('tBT').checked=true;
+    if(d.dir) pickSeg('tDir',d.dir);
+    if(d.setup) pickSeg('tSetup',d.setup);
+    if(d.pair) PENDING_PAIR=d.pair;   // applied once the pair list loads
+  }catch(_){}
+  updRR();
+}
 async function logTrade(){
   if(!CFG.url){ msg('logMsg','Connect first (More ▸ Settings).'); return; }
   var pair=document.getElementById('tPair').value, dir=segVal('tDir');
@@ -531,7 +606,11 @@ async function logTrade(){
     stScore:(c.STscore==null?'':c.STscore), ltScore:(c.LTscore==null?'':c.LTscore),
     carry:(c['Score (-20..+20)']==null?'':c['Score (-20..+20)']), aligned:aligned};
   msg('logMsg','Saving…');
-  try{ var j=await push(body); if(j.ok){ msg('logMsg','Logged '+j.id+'.'); GATE=[]; ['tEntry','tSL','tTP1','tTP2','tLots'].forEach(id=>document.getElementById(id).value=''); refresh(); } else msg('logMsg','Error: '+(j.err||'?')); }
+  try{ var j=await push(body);
+    if(j.ok){ msg('logMsg','Logged '+j.id+'.'); GATE=[]; ['tEntry','tSL','tTP1','tTP2','tLots'].forEach(id=>document.getElementById(id).value='');
+      try{ localStorage.removeItem('tm_draft'); }catch(_){}
+      updRR(); refresh();
+    } else msg('logMsg','Error: '+(j.err||'?')); }
   catch(e){ msg('logMsg','Failed — offline?'); }
 }
 function renderOpen(){
@@ -540,33 +619,106 @@ function renderOpen(){
   el.className='';
   el.innerHTML=open.map(function(t){ return '<div class="card tight"><div class="between"><b class="mono">'+t.pair+' '+t.dir+(t._bt?' <span class="xs amber">BT</span>':'')+'</b><span class="xs mut mono">'+t.id+'</span></div><div class="xs mut mono" style="margin:4px 0 8px">entry '+t.entry+' · SL '+t.sl+' · risk '+(t.risk||'?')+'%</div><input class="mono" id="ls_'+t.id+'" placeholder="lesson / note (optional)" style="margin-bottom:6px"><div class="row"><input class="mono" id="ex_'+t.id+'" placeholder="exit price" inputmode="decimal" style="flex:1"><button class="btn good sm" onclick="closeTrade(\''+t.id+'\')">Close</button></div></div>'; }).join('');
 }
-async function closeTrade(id){ var ex=document.getElementById('ex_'+id).value.trim(); if(!ex){ alert('Enter exit price'); return; }
+async function closeTrade(id){
+  var ex=document.getElementById('ex_'+id).value.trim();
+  var exn=num_(ex);
+  if(!isFinite(exn)){ alert('Exit price must be a number'); return; }
   var lessonEl=document.getElementById('ls_'+id); var lesson=lessonEl?lessonEl.value.trim():'';
-  try{ var j=await push({type:'exit',id:id,exit:ex,exitDT:new Date().toISOString(),lesson:lesson}); if(j.ok) refresh(); else alert('Error: '+(j.err||'?')); }catch(e){ alert('Failed — offline?'); }
+  try{ var j=await push({type:'exit',id:id,exit:exn,exitDT:new Date().toISOString(),lesson:lesson}); if(j.ok) refresh(); else alert('Error: '+(j.err||'?')); }catch(e){ alert('Failed — offline?'); }
 }
 
-// ---- stats (reads object: {overall, gates, pairs}) ----
+// ---- stats: computed in the app from closed trades (falls back to backend Stats sheet) ----
+function closedTrades(){
+  if(!S || !S.trades_closed) return null;               // null = backend not redeployed yet
+  var mode=segVal('stMode');
+  return S.trades_closed
+    .filter(function(t){ var bt=String(t.mode||'').toUpperCase()==='BT'; return mode==='bt'?bt:!bt; })
+    .filter(function(t){ return isFinite(Number(t.R)); });
+}
+function agg(list){
+  var n=list.length,w=0,tot=0;
+  list.forEach(function(t){ var r=Number(t.R); tot+=r; if(r>0)w++; });
+  return {n:n, win:n?Math.round(w/n*100):0, avg:n?Math.round(tot/n*100)/100:0, tot:Math.round(tot*100)/100};
+}
+function groupBy(list,fn){
+  var g={};
+  list.forEach(function(t){ var k=String(fn(t)||'—'); (g[k]=g[k]||[]).push(t); });
+  return Object.keys(g).map(function(k){ var a=agg(g[k]); a.k=k; return a; }).sort(function(a,b){return b.tot-a.tot;});
+}
+function convGroup(t){ var c=String(t.conviction||''); if(c.indexOf('STRONG')>=0)return 'STRONG'; if(c.indexOf('Lean')>=0)return 'Lean'; if(c.indexOf('Split')>=0)return 'Split'; return c?'Neutral':'—'; }
+function equitySVG(list){
+  var pts=list.slice().sort(function(a,b){ return new Date(a.exitDT||a.entryDT||0)-new Date(b.exitDT||b.entryDT||0); });
+  var cum=0, ys=[0]; pts.forEach(function(t){ cum+=Number(t.R); ys.push(cum); });
+  var min=Math.min.apply(null,ys), max=Math.max.apply(null,ys); if(max-min<1e-9){min-=1;max+=1;}
+  var W=300,H=70,pad=4;
+  var coords=ys.map(function(y,i){
+    var x=pad+i*(W-2*pad)/(ys.length-1);
+    var yy=H-pad-(y-min)*(H-2*pad)/(max-min);
+    return x.toFixed(1)+','+yy.toFixed(1);
+  });
+  var zero=H-pad-(0-min)*(H-2*pad)/(max-min);
+  var col=cum>=0?'#3FB27F':'#E5674E';
+  cum=Math.round(cum*100)/100;
+  return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:70px;display:block">'+
+    '<line x1="0" x2="'+W+'" y1="'+zero.toFixed(1)+'" y2="'+zero.toFixed(1)+'" stroke="#2E3849" stroke-width="1"/>'+
+    '<polyline points="'+coords.join(' ')+'" fill="none" stroke="'+col+'" stroke-width="2"/></svg>'+
+    '<div class="xs mut mono" style="margin-top:4px">cumulative R · now '+(cum>0?'+':'')+cum+'R over '+list.length+' trades</div>';
+}
+function grpHtml_(title,rows){
+  return '<div class="statgrp">'+title+'</div>'+rows.map(function(g){
+    var col=g.avg>0?'var(--long)':g.avg<0?'var(--short)':'var(--txt)';
+    var lowN=g.n<5?' · low n':'';
+    return '<div class="statrow"><span>'+g.k+' <span class="xs mut">'+g.win+'% · n'+g.n+lowN+'</span></span><b class="mono" style="color:'+col+'">'+(g.avg>0?'+':'')+g.avg+'R</b></div>';
+  }).join('');
+}
+function gateRow_(g){
+  var col=(g.verdict&&String(g.verdict).indexOf('matters')>=0)?'var(--long)':(g.verdict&&String(g.verdict).indexOf('skip')>=0)?'var(--short)':'var(--mut)';
+  return '<div class="statrow"><span>Gate '+g.gate+' <span class="xs mut">tick '+g.tickedWin+'% (n'+g.tickedTrades+') · skip '+g.skippedWin+'% (n'+g.skippedTrades+')</span></span><b class="xs" style="color:'+col+'">'+(g.verdict||'')+'</b></div>';
+}
 function renderStats(){
   if(!S) return;
   var st=(S.stats&&typeof S.stats==='object'&&!Array.isArray(S.stats))?S.stats:{overall:{},gates:[],pairs:[]};
-  var o=st.overall||{};
-  document.getElementById('kpis').innerHTML=kpi(o.trades!=null?o.trades:'–','closed')+kpi(o.avgR!=null?o.avgR:'–','expectancy R')+kpi(o.winRate!=null?o.winRate+'%':'–','win rate');
-  // gate skip-analysis in the "combos" card
-  var cel=document.getElementById('combos'); var gates=st.gates||[];
-  if(!gates.length){ cel.className='empty'; cel.textContent='No gate data yet.'; }
-  else { cel.className=''; cel.innerHTML='<div class="statgrp">GATE SKIP-ANALYSIS</div>'+gates.map(function(g){
-      var col=(g.verdict&&g.verdict.indexOf('matters')>=0)?'var(--long)':(g.verdict&&g.verdict.indexOf('skip')>=0)?'var(--short)':'var(--mut)';
-      return '<div class="statrow"><span>Gate '+g.gate+' <span class="xs mut">tick '+g.tickedWin+'% (n'+g.tickedTrades+') · skip '+g.skippedWin+'% (n'+g.skippedTrades+')</span></span><b class="xs" style="color:'+col+'">'+(g.verdict||'')+'</b></div>';
-    }).join(''); }
-  // pair breakdown in "allStats"
-  var ael=document.getElementById('allStats'); var pairs=st.pairs||[];
-  if(!pairs.length){ ael.className='empty'; ael.textContent='No closed trades yet.'; }
-  else { ael.className=''; ael.innerHTML='<div class="statgrp">BY PAIR</div>'+pairs.map(function(p){
-      var col=p.R>0?'var(--long)':p.R<0?'var(--short)':'var(--txt)';
-      return '<div class="statrow"><span class="mut">'+p.pair+' <span class="xs">'+p.win+'% (n'+p.trades+')</span></span><b class="mono" style="color:'+col+'">'+(p.R>0?'+':'')+p.R+'R</b></div>';
-    }).join(''); }
+  var ct=closedTrades();
+  var eq=document.getElementById('equity'), cel=document.getElementById('combos'), ael=document.getElementById('allStats');
+  var gates=st.gates||[];
+
+  if(ct===null){   // old backend — show the Stats-sheet numbers, prompt once for the upgrade
+    var o=st.overall||{};
+    document.getElementById('kpis').innerHTML=kpi(o.trades!=null?o.trades:'–','closed')+kpi(o.avgR!=null?o.avgR:'–','expectancy R')+kpi(o.winRate!=null?o.winRate+'%':'–','win rate');
+    eq.className='empty'; eq.textContent='Update Code.gs + deploy a new version to unlock.';
+    if(!gates.length){ cel.className='empty'; cel.textContent='No gate data yet.'; }
+    else { cel.className=''; cel.innerHTML='<div class="statgrp">GATE SKIP-ANALYSIS</div>'+gates.map(gateRow_).join(''); }
+    var pairs=st.pairs||[];
+    if(!pairs.length){ ael.className='empty'; ael.textContent='No closed trades yet.'; }
+    else { ael.className=''; ael.innerHTML='<div class="statgrp">BY PAIR</div>'+pairs.map(function(p){
+        var col=p.R>0?'var(--long)':p.R<0?'var(--short)':'var(--txt)';
+        return '<div class="statrow"><span class="mut">'+p.pair+' <span class="xs">'+p.win+'% (n'+p.trades+')</span></span><b class="mono" style="color:'+col+'">'+(p.R>0?'+':'')+p.R+'R</b></div>';
+      }).join(''); }
+    return;
+  }
+
+  var o2=agg(ct), modeTxt=segVal('stMode')==='bt'?'backtest':'live';
+  document.getElementById('kpis').innerHTML=kpi(o2.n,'closed')+kpi(o2.n?o2.avg:'–','expectancy R')+kpi(o2.n?o2.win+'%':'–','win rate');
+
+  if(!ct.length){ eq.className='empty'; eq.textContent='No closed '+modeTxt+' trades yet.'; }
+  else {
+    eq.className='';
+    eq.innerHTML=(ct.length<10?'<div class="banner info" style="margin-bottom:8px">Early days (n'+ct.length+') — treat everything below as noise until ~30 trades.</div>':'')+equitySVG(ct);
+  }
+
+  if(!ct.length){ cel.className='empty'; cel.textContent='No closed '+modeTxt+' trades yet.'; }
+  else {
+    cel.className='';
+    cel.innerHTML=grpHtml_('BY CONVICTION',groupBy(ct,convGroup))+
+                  grpHtml_('ALIGNED VS CONFLICT — does the macro bias pay?',groupBy(ct,function(t){return t.aligned;}))+
+                  grpHtml_('BY SETUP',groupBy(ct,function(t){return t.setup;}));
+  }
+
+  var gatesHtml=gates.length?('<div class="statgrp">GATE SKIP-ANALYSIS</div>'+gates.map(gateRow_).join('')):'';
+  var pairsHtml=ct.length?grpHtml_('BY PAIR',groupBy(ct,function(t){return t.pair;})):'';
+  if(gatesHtml||pairsHtml){ ael.className=''; ael.innerHTML=gatesHtml+pairsHtml; }
+  else { ael.className='empty'; ael.textContent='No data yet.'; }
 }
-function comboLine(e){ var col=e.avg>0?'var(--long)':'var(--short)'; return '<div class="statrow"><span>'+e.k+' <span class="xs mut">n'+e.n+'</span></span><b class="mono" style="color:'+col+'">'+(e.avg>0?'+':'')+e.avg+'R</b></div>'; }
 function kpi(v,l){ return '<div class="k"><div class="v mono">'+v+'</div><div class="l">'+l+'</div></div>'; }
 
 // ---- pip calc ----
@@ -587,13 +739,13 @@ function pipValueEst(pair){ pair=pair.toUpperCase();
 function pairChanged(){ var p=document.getElementById('pPair').value; document.getElementById('pPipVal').value=pipValueEst(p); }
 function calcFillFromTrade(){
   // pull pair + SL pips from the trade ticket above
-  var pair=document.getElementById('tPair').value; var e=parseFloat(val('tEntry')), sl=parseFloat(val('tSL'));
+  var pair=document.getElementById('tPair').value; var e=num_(val('tEntry')), sl=num_(val('tSL'));
   document.getElementById('pPair').value=pair; document.getElementById('pPipVal').value=pipValueEst(pair);
   if(isFinite(e)&&isFinite(sl)){ var pipsz=pair.toUpperCase().indexOf('JPY')>=0?0.01:pair.toUpperCase().indexOf('XAU')>=0?0.1:0.0001; document.getElementById('pSL').value=Math.round(Math.abs(e-sl)/pipsz*10)/10; }
   if(val('tRisk')) document.getElementById('pRisk').value=val('tRisk');
 }
 function calcLot(){
-  var bal=parseFloat(val('pBal')), risk=parseFloat(val('pRisk')), sl=parseFloat(val('pSL')), pv=parseFloat(val('pPipVal'));
+  var bal=num_(val('pBal')), risk=num_(val('pRisk')), sl=num_(val('pSL')), pv=num_(val('pPipVal'));
   if(!(bal>0&&risk>0&&sl>0&&pv>0)){ document.getElementById('pOut').textContent='Fill balance, risk %, stop, and $/pip.'; return; }
   var riskAmt=bal*risk/100, lots=riskAmt/(sl*pv);
   document.getElementById('pOut').innerHTML='Risk: <b>'+riskAmt.toFixed(2)+'</b> &nbsp; Lots: <b class="amber">'+lots.toFixed(2)+'</b> ('+(lots*10).toFixed(1)+' mini)<br><span class="xs mut">'+sl+' pip stop · '+pv+'/pip per lot</span>';
@@ -605,7 +757,14 @@ function fmt(x){ if(x===''||x==null) return '–'; var n=Number(x); return isFin
 
 document.getElementById('sUrl').value=CFG.url;
 document.getElementById('sAuth').value=CFG.auth;
+try{ var _b=localStorage.getItem('tm_bal'); if(_b) document.getElementById('pBal').value=_b; }catch(_){}
+loadDraft();
 refresh();
+// auto-refresh: every 5 min while the app is visible, and on return if data is stale
+setInterval(function(){ if(document.visibilityState==='visible' && CFG.url) refresh(); }, 300000);
+document.addEventListener('visibilitychange', function(){
+  if(document.visibilityState==='visible' && CFG.url && Date.now()-LAST_SYNC>300000) refresh();
+});
 </script>
 </body>
 </html>
