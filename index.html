@@ -510,10 +510,21 @@ function renderToday(){
     var aligned=!cd?'neutral':(dir===cd?'aligned':'conflict');
     var col=aligned==='aligned'?'var(--long)':aligned==='conflict'?'var(--short)':'var(--mut)';
     var staleTxt=info.c.stale?(' · <span class="amber">⚠ '+(info.c.staleLegs||'stale')+' data old</span>'):'';
-    var ctxTxt=info.ctx?('CTX '+fmt(info.ctx.CTX)+' · ADR left '+fmt(info.ctx['ADR left %'])+'% · %R '+fmt(info.ctx['D%R'])+' · untap '+fmt(info.ctx.Untapped)):'no live context for this pair';
+    var ctxTxt='no live context for this pair', ctx2='';
+    if(info.ctx){
+      ctxTxt='CTX '+fmt(info.ctx.CTX)+' · ADR left '+fmt(info.ctx['ADR left %'])+'% · %R '+fmt(info.ctx['D%R'])+' · untap '+fmt(info.ctx.Untapped);
+      var rp=Number(info.ctx['Range %ADR']), cl=Number(info.ctx['Close loc %']);
+      if(isFinite(rp)){
+        ctx2+='yRange '+rp+'% ADR'+(rp<60?' <span class="amber">⚡ coiled — expansion likely, hold to close</span>':rp>140?' <span class="mut">(big day — expect contraction)</span>':'');
+      }
+      if(isFinite(cl)){
+        ctx2+=(ctx2?' · ':'')+'yClose '+cl+'%'+(cl>=80?' <span class="mut">(closed on highs)</span>':cl<=20?' <span class="mut">(closed on lows)</span>':'');
+      }
+    }
     read.innerHTML='<div class="between" style="margin-top:6px"><span><b class="mono" style="color:'+col+'">'+conv+'</b>'+staleTxt+'</span><span class="pill '+(aligned==='aligned'?'long':aligned==='conflict'?'short':'neu')+'">'+aligned+'</span></div>'+
       '<div class="xs mut mono" style="margin-top:4px">ST '+String(info.c.ST||'—')+' ('+(info.c.STscore>0?'+':'')+info.c.STscore+') · LT '+String(info.c.LT||'—')+' ('+(info.c.LTscore>0?'+':'')+info.c.LTscore+') · carry '+(info.c['Score (-20..+20)']>0?'+':'')+info.c['Score (-20..+20)']+'</div>'+
-      '<div class="xs mut mono" style="margin-top:4px">'+ctxTxt+'</div>';
+      '<div class="xs mut mono" style="margin-top:4px">'+ctxTxt+'</div>'+
+      (ctx2?'<div class="xs mut mono" style="margin-top:4px">'+ctx2+'</div>':'');
   } else read.innerHTML='<div class="xs mut" style="margin-top:6px">No macro score for this pair (e.g. gold) — trade it on TA only.</div>';
   renderGate(); updRR();
 }
@@ -646,6 +657,21 @@ function groupBy(list,fn){
   return Object.keys(g).map(function(k){ var a=agg(g[k]); a.k=k; return a; }).sort(function(a,b){return b.tot-a.tot;});
 }
 function convGroup(t){ var c=String(t.conviction||''); if(c.indexOf('STRONG')>=0)return 'STRONG'; if(c.indexOf('Lean')>=0)return 'Lean'; if(c.indexOf('Split')>=0)return 'Split'; return c?'Neutral':'—'; }
+// session tag from entry time, in New York hours (ICT killzones are defined in NY time)
+function nyHour(iso){
+  var d=new Date(iso); if(isNaN(d)) return NaN;
+  try{ return Number(new Intl.DateTimeFormat('en-US',{hour:'numeric',hour12:false,timeZone:'America/New_York'}).format(d))%24; }
+  catch(_){ return (d.getUTCHours()+20)%24; }   // rough EDT fallback
+}
+function sessionGroup(t){
+  var h=nyHour(t.entryDT||''); if(isNaN(h)) return '—';
+  if(h>=19||h<2) return 'Asia (19-02 NY)';
+  if(h<7)        return 'London (02-07 NY)';
+  if(h<12)       return 'New York (07-12 NY)';
+  return 'NY pm / off-hours';
+}
+function weekdayGroup(t){ var d=new Date(t.entryDT||''); if(isNaN(d)) return '—'; return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()]; }
+var WD_ORDER={Mon:1,Tue:2,Wed:3,Thu:4,Fri:5,Sun:6,Sat:7};
 function equitySVG(list){
   var pts=list.slice().sort(function(a,b){ return new Date(a.exitDT||a.entryDT||0)-new Date(b.exitDT||b.entryDT||0); });
   var cum=0, ys=[0]; pts.forEach(function(t){ cum+=Number(t.R); ys.push(cum); });
@@ -709,9 +735,12 @@ function renderStats(){
   if(!ct.length){ cel.className='empty'; cel.textContent='No closed '+modeTxt+' trades yet.'; }
   else {
     cel.className='';
+    var byWd=groupBy(ct,weekdayGroup).sort(function(a,b){return (WD_ORDER[a.k]||9)-(WD_ORDER[b.k]||9);});
     cel.innerHTML=grpHtml_('BY CONVICTION',groupBy(ct,convGroup))+
                   grpHtml_('ALIGNED VS CONFLICT — does the macro bias pay?',groupBy(ct,function(t){return t.aligned;}))+
-                  grpHtml_('BY SETUP',groupBy(ct,function(t){return t.setup;}));
+                  grpHtml_('BY SETUP',groupBy(ct,function(t){return t.setup;}))+
+                  grpHtml_('BY SESSION — when does your edge live?',groupBy(ct,sessionGroup))+
+                  grpHtml_('BY WEEKDAY',byWd);
   }
 
   var gatesHtml=gates.length?('<div class="statgrp">GATE SKIP-ANALYSIS</div>'+gates.map(gateRow_).join('')):'';
