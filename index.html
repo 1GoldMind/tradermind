@@ -165,8 +165,8 @@
       <button data-v="Breakout" onclick="segPick('tSetup',this);saveDraft()">Breakout</button>
     </div>
     <div class="grid2">
-      <label class="fld">Entry<input id="tEntry" class="mono" inputmode="decimal" oninput="updRR();saveDraft()"></label>
-      <label class="fld">Stop<input id="tSL" class="mono" inputmode="decimal" oninput="updRR();saveDraft()"></label>
+      <label class="fld">Entry<input id="tEntry" class="mono" inputmode="decimal" oninput="updRR();saveDraft()" onchange="renderToday()"></label>
+      <label class="fld">Stop<input id="tSL" class="mono" inputmode="decimal" oninput="updRR();saveDraft()" onchange="renderToday()"></label>
       <label class="fld">TP1<input id="tTP1" class="mono" inputmode="decimal" oninput="updRR();saveDraft()"></label>
       <label class="fld">TP2<input id="tTP2" class="mono" inputmode="decimal" oninput="updRR();saveDraft()"></label>
       <label class="fld">Lots<input id="tLots" class="mono" inputmode="decimal" oninput="saveDraft()"></label>
@@ -510,23 +510,68 @@ function renderToday(){
     var aligned=!cd?'neutral':(dir===cd?'aligned':'conflict');
     var col=aligned==='aligned'?'var(--long)':aligned==='conflict'?'var(--short)':'var(--mut)';
     var staleTxt=info.c.stale?(' · <span class="amber">⚠ '+(info.c.staleLegs||'stale')+' data old</span>'):'';
-    var ctxTxt='no live context for this pair', ctx2='';
-    if(info.ctx){
-      ctxTxt='CTX '+fmt(info.ctx.CTX)+' · ADR left '+fmt(info.ctx['ADR left %'])+'% · %R '+fmt(info.ctx['D%R'])+' · untap '+fmt(info.ctx.Untapped);
-      var rp=Number(info.ctx['Range %ADR']), cl=Number(info.ctx['Close loc %']);
-      if(isFinite(rp)){
-        ctx2+='yRange '+rp+'% ADR'+(rp<60?' <span class="amber">⚡ coiled — expansion likely, hold to close</span>':rp>140?' <span class="mut">(big day — expect contraction)</span>':'');
-      }
-      if(isFinite(cl)){
-        ctx2+=(ctx2?' · ':'')+'yClose '+cl+'%'+(cl>=80?' <span class="mut">(closed on highs)</span>':cl<=20?' <span class="mut">(closed on lows)</span>':'');
-      }
-    }
+    var scoreHtml = info.ctx ? ctxScorecard(info.ctx, dir) : '<div class="xs mut mono" style="margin-top:4px">no live context for this pair</div>';
     read.innerHTML='<div class="between" style="margin-top:6px"><span><b class="mono" style="color:'+col+'">'+conv+'</b>'+staleTxt+'</span><span class="pill '+(aligned==='aligned'?'long':aligned==='conflict'?'short':'neu')+'">'+aligned+'</span></div>'+
       '<div class="xs mut mono" style="margin-top:4px">ST '+String(info.c.ST||'—')+' ('+(info.c.STscore>0?'+':'')+info.c.STscore+') · LT '+String(info.c.LT||'—')+' ('+(info.c.LTscore>0?'+':'')+info.c.LTscore+') · carry '+(info.c['Score (-20..+20)']>0?'+':'')+info.c['Score (-20..+20)']+'</div>'+
-      '<div class="xs mut mono" style="margin-top:4px">'+ctxTxt+'</div>'+
-      (ctx2?'<div class="xs mut mono" style="margin-top:4px">'+ctx2+'</div>':'');
+      scoreHtml;
   } else read.innerHTML='<div class="xs mut" style="margin-top:6px">No macro score for this pair (e.g. gold) — trade it on TA only.</div>';
   renderGate(); updRR();
+}
+// ---- timing scorecard: grades each context figure for the chosen direction ----
+// Direction comes from conviction; these answer "is NOW a good time?" and "how far can it go?"
+function ctxScorecard(ctx, dir){
+  var L = dir==='Long';
+  var adrLeft=Number(ctx['ADR left %']), wr=Number(ctx['D%R']), unt=ctx.Untapped, rp=Number(ctx['Range %ADR']), cl=Number(ctx['Close loc %']), adr=Number(ctx.CTX);
+  var wd=new Date().getDay(), weekend=(wd===0||wd===6);
+  var rows=[];
+  function row(label,val,grade,note,scored){ rows.push({label:label,val:val,grade:grade,note:note,scored:scored!==false}); }
+
+  // ADR left — room left in today's typical move
+  if(isFinite(adrLeft)){
+    if(weekend) row('ADR left',adrLeft+'%','n','weekend — Friday\'s finished day, ignore',false);
+    else row('ADR left',adrLeft+'%', adrLeft>50?'g':adrLeft<25?'r':'n', adrLeft>50?'plenty of room':adrLeft<25?'move mostly done — don\'t chase':'some room');
+  }
+  // %R — position in 14-day range (0 top, -100 bottom)
+  if(isFinite(wr)){
+    var g = L ? (wr<=-80?'g':wr>=-20?'r':'n') : (wr>=-20?'g':wr<=-80?'r':'n');
+    row('%R',wr, g, g==='g'?(L?'buying a dip':'selling a rally'):g==='r'?(L?'stretched — buying near the top':'stretched — selling near the bottom'):'mid-range');
+  }
+  // Untapped — nearest prior-day extreme not yet hit = natural target
+  var hasT = unt!==''&&unt!=null&&isFinite(Number(unt));
+  row('Untapped', hasT?unt+'p':'–', hasT?'g':'r', hasT?'target '+unt+'p away':'both prior levels hit — no magnet');
+  // yClose — who won yesterday
+  if(isFinite(cl)){
+    var gc = L ? (cl>=70?'g':cl<=30?'r':'n') : (cl<=30?'g':cl>=70?'r':'n');
+    row('yClose',cl+'%', gc, cl>=70?'buyers won yesterday':cl<=30?'sellers won yesterday':'no clear winner');
+  }
+  // yRange — compression/expansion cycle (not scored, affects HOW you trade, not whether)
+  if(isFinite(rp)){
+    row('yRange',rp+'% ADR', rp<60?'g':rp>140?'r':'n', rp<60?'⚡ coiled — expect a big day, hold to close':rp>140?'big day just happened — expect chop':'normal day', false);
+  }
+  // CTX — stop-size check against the pair's typical day
+  var e=num_(val('tEntry')), s=num_(val('tSL')), pair=document.getElementById('tPair').value;
+  var ctxNote='typical day';
+  if(isFinite(adr)&&isFinite(e)&&isFinite(s)&&e!==s){
+    var pipsz=pair.toUpperCase().indexOf('JPY')>=0?0.01:pair.toUpperCase().indexOf('XAU')>=0?0.1:0.0001;
+    var sp=Math.abs(e-s)/pipsz, r=sp/adr;
+    ctxNote='your stop = '+Math.round(sp)+'p = '+Math.round(r*100)+'% of a typical day'+(r>0.34?' — wide':' — ok');
+  }
+  row('CTX',isFinite(adr)?adr+'p':'–','n',ctxNote,false);
+
+  // verdict from scored rows
+  var scored=rows.filter(function(r){return r.scored;}), greens=scored.filter(function(r){return r.grade==='g';}).length, reds=scored.filter(function(r){return r.grade==='r';}).length;
+  var v, vc;
+  if(scored.length<3){ v='not enough data'; vc='var(--mut)'; }
+  else if(greens>=3){ v='TIMING GOOD — normal size'; vc='var(--long)'; }
+  else if(greens===2&&reds<=1){ v='TIMING OK — consider half size'; vc='var(--accent)'; }
+  else { v='WAIT — let price prove the direction first'; vc='var(--short)'; }
+
+  var dot={g:'🟢',n:'⚪',r:'🔴'};
+  return '<div style="margin-top:8px;border-top:1px solid var(--line);padding-top:6px">'+
+    '<div class="between"><span class="xs mut">Timing for a <b>'+dir+'</b></span><span class="xs mono" style="color:'+vc+';font-weight:700">'+greens+'/'+scored.length+' green</span></div>'+
+    rows.map(function(r){ return '<div class="xs mono" style="display:flex;gap:6px;margin-top:3px"><span>'+dot[r.grade]+'</span><span style="width:62px;color:var(--mut)">'+r.label+'</span><span style="width:70px">'+r.val+'</span><span class="mut" style="flex:1">'+r.note+'</span></div>'; }).join('')+
+    '<div class="sm" style="margin-top:6px;font-weight:700;color:'+vc+'">'+v+'</div>'+
+  '</div>';
 }
 var GATE=[];
 function renderGate(){
